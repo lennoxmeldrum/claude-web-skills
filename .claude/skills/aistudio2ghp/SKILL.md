@@ -1,0 +1,105 @@
+---
+name: aistudio2ghp
+description: Convert a freshly-pushed Google AI Studio repository into a GitHub Pages-deployable app. Sets the Vite base path, adds a .nojekyll file, verifies the index.html entry-point script tag, renames the default AI Studio page title, ensures iframe-embeddability, and adds a GitHub Actions workflow that builds and deploys to GitHub Pages on push to main. Use only for apps that do NOT require runtime API keys (the user has decided GH Pages is unsuitable for API-key apps). Optionally, after the GH Pages conversion, also wraps the app for embedding into the ExplAIn Sims site (explainsims/explainsims.github.io) as a tab/unit app — but only on explicit user request. Use whenever the user asks to prepare an AI Studio repo for GitHub Pages.
+---
+
+# AI Studio → GitHub Pages conversion
+
+The user has just created an app in Google AI Studio and pushed it to GitHub. They want it deployed as a standalone GitHub Pages site that is also embeddable as an iframe. **This skill assumes the app does NOT require a runtime API key** — that's a deliberate constraint the user has set, since GH Pages can't safely hold one.
+
+Work on the user's currently-attached repo (or the one they specify); make all changes on a feature branch and open a PR when finished.
+
+## Part 1 — GitHub Pages conversion (always do this)
+
+### 1. Vite base path
+In `vite.config.ts`, set the `base` option so assets resolve under the GitHub Pages subpath:
+
+- For a project page at `https://<owner>.github.io/<repo>/`: `base: '/<repo>/'`
+- For a user/org page at `https://<name>.github.io/`: `base: '/'`
+
+Read the repo name from the remote and use it; don't guess.
+
+### 2. `.nojekyll`
+Add an empty `.nojekyll` file at the repo root so GitHub Pages serves files starting with `_`.
+
+### 3. AI Studio entry point
+AI Studio apps require a `<script type="module">` tag in `index.html` that loads the application entry point. Verify that the script tag points at the **actual entry file in this repo** — it might be `/index.tsx`, `/src/main.tsx`, `/src/index.tsx`, or similar. Open the repo and confirm the path matches a real file. Without a correct script tag, Vite won't bundle the application code and the page will be blank.
+
+### 4. Page title
+Replace the default `<title>` in `index.html` (AI Studio leaves it as "My Google AI Studio App" or similar) with a concise, descriptive name based on the repository name and the app's purpose.
+
+### 5. Iframe-friendliness
+GitHub Pages does not add `X-Frame-Options` to user content, so iframes generally work. To be explicit and to satisfy stricter embedders (like Google Sites), add a meta CSP to `<head>` in `index.html`:
+
+`<meta http-equiv="Content-Security-Policy" content="frame-ancestors *">`
+
+Do not add an `X-Frame-Options` meta tag — it has no effect as a meta and only causes confusion.
+
+### 6. GitHub Actions deployment workflow
+Create `.github/workflows/deploy-pages.yml` that:
+
+- Triggers on push to `main` (and on `workflow_dispatch`).
+- Has `permissions: { contents: read, pages: write, id-token: write }`.
+- Uses `actions/checkout@v4`, `actions/setup-node@v4` (Node 20).
+- Runs `npm ci` then `npm run build`.
+  - **Never forget the `package-lock.json` file** if using `npm ci` — generate one if missing. This has been a recurring miss in past similar tasks.
+- Uses `actions/configure-pages@v5`, `actions/upload-pages-artifact@v3` on `dist/`, `actions/deploy-pages@v4`.
+- Has the standard `concurrency: { group: 'pages', cancel-in-progress: false }` block.
+
+### 7. Sanity check & report
+Confirm `package.json` has a `build` script that produces `dist/`. In the final PR summary, tell the user:
+
+- The exact GH Pages URL the site will live at.
+- That they need to set repo Settings → Pages → Source to "GitHub Actions".
+- The iframe snippet for embedding: `<iframe src="URL" width="100%" height="100%"></iframe>`.
+
+## Part 2 — ExplAIn Sims integration (only on explicit user request)
+
+After Part 1 is done, **ask the user** whether they want to also integrate this app into the ExplAIn Sims site (`explainsims/explainsims.github.io`). Frame the question as optional. If they say no or don't ask for it, stop after Part 1.
+
+If they say yes, gather these details from the user before starting (use AskUserQuestion):
+
+1. **Tab** — which tab page does this belong on? (`appcm.html` for AP PCM, `tools.html` for Tools, `fun.html` for Fun, `panphy.html` for PanPhy, or another.)
+2. **Unit / section** — for tab pages that are organised by unit (e.g. `appcm.html`), which unit/section should the card go into?
+3. **App slug** — the snake_case slug for the wrapper file (e.g. `friction_lab`); default to a slug derived from the repo name and confirm.
+4. **Card copy** — short title and one-line blurb for the card.
+5. **Featured?** — should the app also be added to the `FEATURED_POOL` array in `index.html` for the featured rotation?
+
+Then perform the integration in the `explainsims/explainsims.github.io` repo:
+
+### A. Wrapper page at `<tab-dir>/<slug>.html`
+Create a thin wrapper page (e.g. `appcm/<slug>.html`) that follows ExplAIn Sims conventions documented in that repo's `CLAUDE.md`:
+
+- Standard banner (sticky, with home logo, back button, title, theme toggle).
+- Per-app localStorage theme key: `<slug>-dark` (and `<slug>-light`).
+- Standard help panel with content describing what the sim does and its controls.
+- Shared footer (`<div id="site-footer"></div>` + `<script src="/assets/footer.js"></script>` immediately before `</body>`).
+- Brave iOS gradient-text fix script.
+- Body contains a full-bleed iframe that fills the viewport below the banner. Use a flex column layout: banner is fixed-height, iframe gets `flex: 1; width: 100%; border: 0;`. Do not hardcode pixel heights.
+- iframe `src` is the GitHub Pages URL of the standalone app.
+- iframe attributes: `allow="clipboard-write; fullscreen"`, `referrerpolicy="strict-origin-when-cross-origin"`. Add `sandbox` only if the app tolerates it.
+
+Read `explainsims/explainsims.github.io/CLAUDE.md` first and follow the banner/help/footer patterns exactly — copy them rather than improvising.
+
+### B. Card on the tab page
+Add a card on the tab HTML (e.g. `appcm.html`) under the correct unit/section:
+
+- `card-source-pill` text matching the tab name (`"AP PCM"` for appcm, `"Tools"` for tools, `"Fun"` for fun, etc.).
+- Title and blurb from the user's input.
+- Link points to `/<tab-dir>/<slug>.html`.
+- Match the markup of surrounding cards in that section exactly.
+
+### C. Sitemap & featured pool
+- Add `/<tab-dir>/<slug>.html` to `sitemap.xml`.
+- If the user said yes to featured, add an entry to `FEATURED_POOL` in `index.html`.
+
+### D. Branch + PR
+Use a `claude/` branch prefix per ExplAIn Sims conventions. Open a PR ready for review (not draft).
+
+## Final summary
+
+Whether you do Part 1 alone or both parts, end with a summary listing:
+
+- The GH Pages URL of the standalone app.
+- (If Part 2) The ExplAIn Sims wrapper URL and the tab page link path.
+- Any manual steps left for the user (set Pages source to GitHub Actions, merge PRs, etc.).
