@@ -1,6 +1,6 @@
 ---
 name: aistudio2ghp
-description: Convert a freshly-pushed Google AI Studio repository into a GitHub Pages-deployable app. Sets the Vite base path, adds a .nojekyll file, verifies the index.html entry-point script tag, renames the default AI Studio page title, ensures iframe-embeddability, and adds a GitHub Actions workflow that builds and deploys to GitHub Pages on push to main. Use only for apps that do NOT require runtime API keys (the user has decided GH Pages is unsuitable for API-key apps). Optionally, after the GH Pages conversion, also wraps the app for embedding into the ExplAIn Sims site (explainsims/explainsims.github.io) as a tab/unit app — but only on explicit user request. Use whenever the user asks to prepare an AI Studio repo for GitHub Pages.
+description: Convert a freshly-pushed Google AI Studio repository into a GitHub Pages-deployable app. Sets the Vite base path, adds a .nojekyll file, verifies the index.html entry-point script tag, renames the default AI Studio page title, ensures iframe-embeddability, and adds a GitHub Actions workflow that builds and deploys to GitHub Pages on push to main. Use only for apps that do NOT require runtime API keys (the user has decided GH Pages is unsuitable for API-key apps). Optionally, after the GH Pages conversion, also reimplements the app as a native vanilla HTML/CSS/JS page in the ExplAIn Sims site (explainsims/explainsims.github.io) so it matches the rest of the site's look and conventions — this is a hand-ported parallel rebuild, NOT an iframe wrapper, and only happens on explicit user request. Use whenever the user asks to prepare an AI Studio repo for GitHub Pages.
 ---
 
 # AI Studio → GitHub Pages conversion
@@ -57,31 +57,38 @@ Confirm `package.json` has a `build` script that produces `dist/`. In the final 
 
 After Part 1 is done, **ask the user** whether they want to also integrate this app into the ExplAIn Sims site (`explainsims/explainsims.github.io`). Frame the question as optional. If they say no or don't ask for it, stop after Part 1.
 
+This integration is **not** an iframe wrapper. The AI Studio app (typically React + Vite + TypeScript) must be **rewritten as a native ExplAIn Sims page** using vanilla HTML/CSS/JS so it matches the look, feel, and conventions of the rest of the site. The standalone GH Pages build from Part 1 stays as the source-of-truth for the original implementation; the ExplAIn Sims version is a parallel, hand-ported rebuild.
+
 If they say yes, gather these details from the user before starting (use AskUserQuestion):
 
 1. **Tab** — which tab page does this belong on? (`appcm.html` for AP PCM, `tools.html` for Tools, `fun.html` for Fun, `panphy.html` for PanPhy, or another.)
 2. **Unit / section** — for tab pages that are organised by unit (e.g. `appcm.html`), which unit/section should the card go into?
-3. **App slug** — the snake_case slug for the wrapper file (e.g. `friction_lab`); default to a slug derived from the repo name and confirm.
+3. **App slug** — the snake_case slug for the page file (e.g. `friction_lab`); default to a slug derived from the repo name and confirm.
 4. **Card copy** — short title and one-line blurb for the card.
 5. **Featured?** — should the app also be added to the `FEATURED_POOL` array in `index.html` for the featured rotation?
 
 Then perform the integration in the `explainsims/explainsims.github.io` repo:
 
-### A. Wrapper page at `<tab-dir>/<slug>.html`
-Create a thin wrapper page (e.g. `appcm/<slug>.html`) that follows ExplAIn Sims conventions documented in that repo's `CLAUDE.md`:
+### A. Read the conventions first
+Read `explainsims/explainsims.github.io/CLAUDE.md` and open several existing sims in the same tab directory before writing any code. Match the established patterns exactly — banner markup, help panel structure, theme variables and tokens, footer wiring, layout primitives, control panel styling. Do not improvise; copy from neighboring pages.
 
-- Standard banner (sticky, with home logo, back button, title, theme toggle).
-- Per-app localStorage theme key: `<slug>-dark` (and `<slug>-light`).
-- Standard help panel with content describing what the sim does and its controls.
-- Shared footer (`<div id="site-footer"></div>` + `<script src="/assets/footer.js"></script>` immediately before `</body>`).
-- Brave iOS gradient-text fix script.
-- Body contains a full-bleed iframe that fills the viewport below the banner. Use a flex column layout: banner is fixed-height, iframe gets `flex: 1; width: 100%; border: 0;`. Do not hardcode pixel heights.
-- iframe `src` is the GitHub Pages URL of the standalone app.
-- iframe attributes: `allow="clipboard-write; fullscreen"`, `referrerpolicy="strict-origin-when-cross-origin"`. Add `sandbox` only if the app tolerates it.
+### B. Port the app to vanilla HTML/CSS/JS at `<tab-dir>/<slug>.html`
+Create a self-contained page (e.g. `appcm/<slug>.html`) that reimplements the AI Studio app from scratch:
 
-Read `explainsims/explainsims.github.io/CLAUDE.md` first and follow the banner/help/footer patterns exactly — copy them rather than improvising.
+- **No build step, no iframe, no React/JSX, no TypeScript, no bundler.** Plain HTML, plain CSS, and plain JS in `<script>` tags or co-located `.js` files following whatever the rest of that tab directory uses. If neighboring sims use ES modules from a CDN (e.g. for math or plotting), follow that pattern.
+- Read the source of the AI Studio app (typically `App.tsx`, `index.tsx`, `components/*.tsx`, plus any state hooks/contexts) and translate the logic, state, math, and rendering into vanilla DOM/Canvas/SVG. **Preserve the actual behaviour, equations, and parameter ranges** of the simulation — do not paraphrase physics or simplify the model. If something is genuinely impractical to port 1:1, flag it explicitly rather than silently dropping it.
+- Reuse the site's design tokens (CSS variables for colors, spacing, typography, shadows) instead of carrying over AI Studio's bespoke styling. The ported page must visually belong on ExplAIn Sims, not look like a transplanted React app.
+- Include the standard ExplAIn Sims chrome by copying from a neighboring sim:
+  - Sticky banner with home logo, back button, page title, theme toggle.
+  - Per-app localStorage theme key: `<slug>-dark` (and `<slug>-light` if the convention uses both).
+  - Help panel describing what the sim does and its controls, populated from the AI Studio app's UX/instructions.
+  - Shared footer (`<div id="site-footer"></div>` + `<script src="/assets/footer.js"></script>` immediately before `</body>`).
+  - Brave iOS gradient-text fix script if surrounding pages use it.
+- Layout uses the same flex/grid primitives as neighboring sims; do not hardcode pixel heights for the main content area.
 
-### B. Card on the tab page
+If the AI Studio app pulls in third-party libraries (e.g. a charting lib, a physics engine, KaTeX), prefer the same CDN-loaded vanilla version that other ExplAIn Sims pages already use. If no equivalent is already in use on the site, reimplement the needed subset directly rather than introducing a new dependency just for this page.
+
+### C. Card on the tab page
 Add a card on the tab HTML (e.g. `appcm.html`) under the correct unit/section:
 
 - `card-source-pill` text matching the tab name (`"AP PCM"` for appcm, `"Tools"` for tools, `"Fun"` for fun, etc.).
@@ -89,17 +96,21 @@ Add a card on the tab HTML (e.g. `appcm.html`) under the correct unit/section:
 - Link points to `/<tab-dir>/<slug>.html`.
 - Match the markup of surrounding cards in that section exactly.
 
-### C. Sitemap & featured pool
+### D. Sitemap & featured pool
 - Add `/<tab-dir>/<slug>.html` to `sitemap.xml`.
 - If the user said yes to featured, add an entry to `FEATURED_POOL` in `index.html`.
 
-### D. Branch + PR
+### E. Branch + PR
 Use a `claude/` branch prefix per ExplAIn Sims conventions. Open a PR ready for review (not draft).
+
+### F. Verification
+Open the new page in a browser (or the local dev server the repo uses) and exercise the simulation alongside the original AI Studio / GH Pages version. Confirm parity on the main interactions, that the theme toggle works, and that the help panel and footer render correctly. If the port has known gaps vs. the original, list them in the PR description.
 
 ## Final summary
 
 Whether you do Part 1 alone or both parts, end with a summary listing:
 
 - The GH Pages URL of the standalone app.
-- (If Part 2) The ExplAIn Sims wrapper URL and the tab page link path.
+- (If Part 2) The ExplAIn Sims page URL and the tab page link path.
 - Any manual steps left for the user (set Pages source to GitHub Actions, merge PRs, etc.).
+- (If Part 2) A note that the ExplAIn Sims version is an independent hand-ported vanilla rebuild, not a live mirror — future changes to the AI Studio app will not auto-propagate and need to be re-ported.
