@@ -76,13 +76,13 @@ jobs:
 
     - name: Build and Push Container
       run: |
-        IMAGE_NAME="us-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest"
+        IMAGE_NAME="us-west1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest"
         docker build -t $IMAGE_NAME .
         docker push $IMAGE_NAME
 
     - name: Deploy to Cloud Run
       run: |
         gcloud run deploy ${{ github.event.repository.name }} \
-          --image us-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest \
+          --image us-west1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest \
           --region ${{ vars.GCP_REGION || 'us-west1' }} \
           --allow-unauthenticated
