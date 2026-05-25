@@ -86,3 +86,19 @@ jobs:
           --image us-west1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest \
           --region ${{ vars.GCP_REGION || 'us-west1' }} \
           --allow-unauthenticated
+
+
+```
+
+### 9. Relative asset path correction (Cloudflare Subpath Compatibility)
+The application will be served behind a Cloudflare Worker reverse proxy using a subpath prefix (e.g., [domain.com/repository-name/](https://domain.com/repository-name/)). 
+- Scan all source files (especially `.tsx`, `.ts`, `.jsx`, `.js`, and `index.html`) for root-absolute asset paths.
+- Pay specific attention to `<image href="/...">` tags inside SVGs or custom components, as well as standard image/asset references that use a leading slash.
+- Convert these root-absolute asset references to relative paths by removing the leading slash (e.g., change `href="/CASEL.png"` to `href="CASEL.png"`), allowing the browser to correctly resolve the asset against the current subpath URL context.
+
+## Workflow
+
+1. Read the target application repo to confirm framework setup, entry point, title, and file paths.
+2. Generate/edit all required files directly on the `main` branch. 
+3. Commit and push the changes directly to GitHub. 
+4. In the final summary conversation, provide the expected live URL pattern based on the project ID and repository name, alongside a clean `<iframe src="URL" width="100%" height="100%"></iframe>` embedding block. Remind the user that the background action trigger is running and the link will go live in 2-3 minutes.
