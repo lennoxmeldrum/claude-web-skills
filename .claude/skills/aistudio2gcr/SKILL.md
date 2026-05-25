@@ -91,10 +91,19 @@ jobs:
 ```
 
 ### 9. Relative asset path correction (Cloudflare Subpath Compatibility)
-The application will be served behind a Cloudflare Worker reverse proxy using a subpath prefix (e.g., [domain.com/repository-name/](https://domain.com/repository-name/)). 
-- Scan all source files (especially `.tsx`, `.ts`, `.jsx`, `.js`, and `index.html`) for root-absolute asset paths.
-- Pay specific attention to `<image href="/...">` tags inside SVGs or custom components, as well as standard image/asset references that use a leading slash.
-- Convert these root-absolute asset references to relative paths by removing the leading slash (e.g., change `href="/CASEL.png"` to `href="CASEL.png"`), allowing the browser to correctly resolve the asset against the current subpath URL context.
+The application will be served behind a Cloudflare Worker reverse proxy using a subpath prefix (e.g., domain.com/repository-name/) which may or may not be accessed with a trailing slash.
+- Define a global dynamic path-resolver helper within the main entry files (such as App.tsx or a shared utility file):
+
+```typescript
+const getAssetPath = (url: string) => {
+  const clean = url.startsWith('/') ? url.slice(1) : url;
+  const isProxy = window.location.hostname.includes('explainsims.com');
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  return isProxy && segments.length > 0 ? '/' + segments[0] + '/' + clean : '/' + clean;
+};
+```
+- Scan all source code files (such as .tsx, .ts, .jsx, .js, and index.html) for static root-absolute or standard relative asset paths (e.g., /CASEL.png or logo.png).
+- Wrap and resolve these paths utilizing the dynamic helper. For example, replace `<image href="/CASEL.png" />` with `<image href={getAssetPath("CASEL.png")} />`. This guarantees correct resolution under both explainsims.com subpath contexts (with or without trailing slashes) and direct *.run.app / localhost URLs.
 
 ## Workflow
 
