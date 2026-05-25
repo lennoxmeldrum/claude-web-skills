@@ -1,11 +1,11 @@
 ---
 name: aistudio2gcr
-description: Convert a freshly-pushed Google AI Studio repository into a Cloud Run-ready app. Adds a Dockerfile, nginx config with iframe-friendly headers, runtime environment-variable injection (docker-entrypoint.sh + runtime-config.js), an API_KEY fallback alongside GEMINI_API_KEY, verifies the index.html entry-point script tag, and renames the default AI Studio page title. Use whenever the user asks to prepare an AI Studio repo for Cloud Run, mentions GCR/Cloud Run deployment of a Vite/React app from AI Studio, or pastes/attaches such a repo with that intent.
+description: Convert a freshly-pushed Google AI Studio repository into a Cloud Run-ready app. Adds a Dockerfile, nginx config with iframe-friendly headers, runtime environment-variable injection (docker-entrypoint.sh + runtime-config.js), an API_KEY fallback alongside GEMINI_API_KEY, verifies the index.html entry-point script tag, renames the default AI Studio page title, and generates a GitHub Actions workflow for zero-click automatic deployment. Use whenever the user asks to prepare an AI Studio repo for Cloud Run, mentions GCR/Cloud Run deployment of a Vite/React app from AI Studio, or pastes/attaches such a repo with that intent.
 ---
 
 # AI Studio → Cloud Run conversion
 
-The user has just created an app in Google AI Studio and pushed it to GitHub. They will be connecting the repo to Cloud Run. Look at the code and add everything needed to make that connection deploy cleanly. Work on the user's currently-attached repo (or the one they specify); make all changes on a feature branch and open a PR when finished.
+The user has just created an app in Google AI Studio and pushed it to GitHub. They will be connecting the repo to Cloud Run via automated GitHub Actions. Look at the code and add everything needed to make that connection deploy cleanly. Work on the user's currently-attached app repo; commit all changes directly to the main branch to instantly trigger the deployment.
 
 ## Required changes
 
@@ -47,13 +47,42 @@ The user needs to embed the deployed URL in a Google Site. If using nginx in pro
 
 If there's no nginx (e.g. a Node server), ensure the production server doesn't set restrictive frame headers.
 
-## Workflow
+### 8. Automated GitHub Actions Deployment File
+Create a file named `.github/workflows/deploy.yml`. This file must configure an automatic workflow that fires on every push to the main branch. Write it exactly like this template so it pulls settings dynamically from the repository metadata and organization variables:
 
-1. Read the repo to confirm: framework (assume Vite/React unless evidence otherwise), entry-point file, API key references, current `index.html` `<title>`, presence of `package-lock.json`.
-2. Make all the changes above on a feature branch.
-3. Commit with clear messages and push.
-4. Open a PR (ready for review, not draft).
-5. In the final summary, tell the user:
-   - Which secrets to set in Cloud Run (`API_KEY` at minimum).
-   - The expected Cloud Run URL pattern and the iframe snippet to drop into Google Sites: `<iframe src="URL" width="100%" height="100%"></iframe>`.
-   - Anything they need to do manually in the Cloud Run console.
+```yaml
+name: Automated Cloud Run Deploy
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Configure Docker for GCP
+      run: gcloud auth configure-docker us-west1-docker.pkg.dev --quiet
+
+    - name: Build and Push Container
+      run: |
+        IMAGE_NAME="us-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest"
+        docker build -t $IMAGE_NAME .
+        docker push $IMAGE_NAME
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy ${{ github.event.repository.name }} \
+          --image us-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ github.event.repository.name }}:latest \
+          --region ${{ vars.GCP_REGION || 'us-west1' }} \
+          --allow-unauthenticated
