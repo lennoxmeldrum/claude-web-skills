@@ -1,6 +1,6 @@
 ---
 name: aistudio2gcr
-description: Convert a freshly-pushed Google AI Studio repository into a Cloud Run-ready app. Adds a Dockerfile, nginx config with iframe-friendly headers, runtime environment-variable injection (docker-entrypoint.sh + runtime-config.js), an API_KEY fallback alongside GEMINI_API_KEY, verifies the index.html entry-point script tag, renames the default AI Studio page title, and generates a GitHub Actions workflow for zero-click automatic deployment. Use whenever the user asks to prepare an AI Studio repo for Cloud Run, mentions GCR/Cloud Run deployment of a Vite/React app from AI Studio, or pastes/attaches such a repo with that intent.
+description: Convert a freshly-pushed Google AI Studio repository into a Cloud Run-ready app. Adds a Dockerfile, nginx config with iframe-friendly headers, runtime environment-variable injection (docker-entrypoint.sh + runtime-config.js), an API_KEY fallback alongside GEMINI_API_KEY, verifies the index.html entry-point script tag, renames the default AI Studio page title, adds a fitting inline-SVG emoji favicon, and generates a GitHub Actions workflow for zero-click automatic deployment. Use whenever the user asks to prepare an AI Studio repo for Cloud Run, mentions GCR/Cloud Run deployment of a Vite/React app from AI Studio, or pastes/attaches such a repo with that intent.
 ---
 
 # AI Studio → Cloud Run conversion
@@ -22,8 +22,20 @@ This way the user only needs to set `API_KEY` in Cloud Run secrets, but the orig
 ### 3. AI Studio entry point
 AI Studio apps require a `<script type="module">` tag in `index.html` that loads the application entry point. Verify that the script tag points at the **actual entry file in this repo** — it might be `/index.tsx`, `/src/main.tsx`, `/src/index.tsx`, or similar. Open the repo and confirm the path matches a real file. Without a correct script tag, Vite won't bundle the application code and the page will be blank.
 
-### 4. Page title
+### 4. Page title & favicon
 Replace the default `<title>` in `index.html` (AI Studio leaves it as "My Google AI Studio App" or similar) with a concise, descriptive name based on the repository name and the app's purpose.
+
+While you're in the `<head>`, give the app a favicon so the browser tab shows a real icon instead of the blank default — AI Studio apps ship without one. Use an **inline SVG data-URI** holding a single emoji glyph chosen to fit what the app actually does (e.g. 🧭 for a navigation/trip tool, ⚛️ for a physics sim, 📊 for a data dashboard, 🗺️ for a map). Add it right after the `<title>`:
+
+```html
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>" />
+```
+
+Pick the emoji to match the subject; don't leave the placeholder compass unless the app is actually about navigation. Prefer this inline data-URI over a separate `favicon.ico`/`.png` file because:
+- It needs no extra files and no build/asset wiring.
+- It is immune to the Cloudflare subpath proxy — a data-URI has no path to rewrite, so it resolves identically under `explainsims.com/<app>/`, the direct `*.run.app` URL, and localhost. A root-absolute `/favicon.ico` would break under the subpath proxy (the same class of bug section 9 exists to prevent).
+
+If the repo already ships a brand logo/icon you'd rather use, that's fine, but reference it so the path still resolves under the subpath proxy (see section 9); when in doubt, the emoji data-URI is the safe default.
 
 ### 5. Runtime environment variables
 For static builds deployed to Cloud Run, implement runtime environment variable injection:
