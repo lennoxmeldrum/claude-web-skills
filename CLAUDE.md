@@ -60,3 +60,29 @@ that burn quota.
 11. Prefer giving subagents narrowly scoped tasks (research, single-file edits)
     rather than broad multi-file generation tasks, since broad tasks are more
     likely to involve large Writes.
+
+## Pull request conventions
+
+Always create a **new branch and a new PR** for each distinct change. Never push
+additional commits onto a branch that already has an open PR.
+
+**Why this matters:** When Lennox clicks a PR link, GitHub takes him straight to the
+"Ready to merge" button at the bottom. Adding commits to an existing PR invalidates
+that link — he'd have to navigate manually through Pull Requests → New → Compare →
+New PR to reach the same button. Every PR should be a one-click merge.
+
+### Rules
+
+12. New branch + new PR every time, even for small follow-ups to something just
+    shipped. Do not reuse branches.
+13. Use unique, dated branch names to avoid accidental reuse:
+    `<scope>/<description>-YYYYMMDD` (e.g. `upgrade/node-24-20260607`).
+14. Multiple open PRs in the same repo are fine. Merging PR #19 does NOT
+    automatically merge #17 or #18 — each is independent. Lennox merges them
+    individually and in any order.
+15. Cross-repo PRs (different repos) can never conflict with each other. Always
+    safe to open in parallel.
+16. The only genuine risk is two same-repo PRs editing the same line of the same
+    file — rare in practice. If it happens, the second PR needs a rebase after
+    the first merges. Not a reason to avoid new PRs; just something to handle if
+    it arises.
